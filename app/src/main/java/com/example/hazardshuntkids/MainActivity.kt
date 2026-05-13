@@ -96,7 +96,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     @Composable
     fun HazardsHuntApp() {
         var showCamera by remember { mutableStateOf(false) }
-        var capturedImages by remember { mutableStateOf(listOf<Pair<Uri, String>>()) }
+        var capturedImages by remember { mutableStateOf(listOf<Pair<Uri, String>>()) } // current session
+        var historyImages by remember { mutableStateOf(listOf<Pair<Uri, String>>()) }  // all sessions
         var analysisResults by remember { mutableStateOf(mapOf<Uri, String>()) }
         var hasApiKey by remember { mutableStateOf(ApiKeyManager.hasKey(this@MainActivity)) }
         var showSettings by remember { mutableStateOf(false) }
@@ -106,26 +107,20 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (showCamera) {
             CameraScreen(
                 onFinished = { newImages ->
-                    capturedImages = capturedImages + newImages
+                    capturedImages = newImages                 // only current session
+                    historyImages = historyImages + newImages // add to history
                     showCamera = false
                 }
             )
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
-                // 使用 painterResource + ContentScale.Crop 安全显示背景
-//                Image(
-//                    painter = painterResource(R.drawable.app_background),
-//                    contentDescription = null,
-//                    modifier = Modifier.fillMaxSize(),
-//                    contentScale = ContentScale.Crop
-//                )
                 val context = LocalContext.current
                 val bgBitmap = remember {
                     decodeSampledBitmapFromResource(
                         context,
                         R.drawable.app_background,
                         reqWidth = 1080,
-                        reqHeight = 800  // 安全高度，避免 Canvas OOM
+                        reqHeight = 800
                     )
                 }
 
@@ -135,12 +130,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = 80.dp),   // 🔹 背景图片整体下移 80dp
+                            .offset(y = 80.dp),
                         contentScale = ContentScale.Crop
                     )
                 }
+
                 Scaffold(
-//                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     containerColor = Color.White.copy(alpha = 0.5f),
                     topBar = {
                         TopAppBar(
@@ -152,7 +147,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
                                                     colors = listOf(
                                                         MaterialTheme.colorScheme.primary,
-                                                        androidx.compose.ui.graphics.Color.Magenta
+                                                        Color.Magenta
                                                     )
                                                 ),
                                                 fontWeight = FontWeight.Bold
@@ -189,31 +184,36 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             if (showSettings) {
                                 ApiKeySettingsScreen(context) { showSettings = false }
                             } else {
-                                MainContent(capturedImages, analysisResults) { showCamera = true }
+                                // Updated MainContent to handle history
+                                MainContent(
+                                    capturedImages = capturedImages,
+                                    historyImages = historyImages,
+                                    analysisResults = analysisResults,
+                                    onStartCamera = { showCamera = true }
+                                )
                             }
                         }
                     }
                 }
-            }
 
-            // 按拍照顺序分析并朗读
-            LaunchedEffect(capturedImages) {
-                val toAnalyze = capturedImages.filter { it.first !in analysisResults.keys }
-                for ((uri, name) in toAnalyze) {
-                    try {
-                        val result = suspendCancellableCoroutine<String> { cont ->
-                            OpenAIClient.analyzeImage(
-                                context = context,
-                                imageUri = uri,
-//                                prompt = "This is $name. Analyze and list hazards clearly.",
-                                onResult = { cont.resume(it) {} },
-                                onError = { cont.resume("Error: $it") {} }
-                            )
+                // Analyze new images and speak
+                LaunchedEffect(capturedImages) {
+                    val toAnalyze = capturedImages.filter { it.first !in analysisResults.keys }
+                    for ((uri, name) in toAnalyze) {
+                        try {
+                            val result = suspendCancellableCoroutine<String> { cont ->
+                                OpenAIClient.analyzeImage(
+                                    context = context,
+                                    imageUri = uri,
+                                    onResult = { cont.resume(it) {} },
+                                    onError = { cont.resume("Error: $it") {} }
+                                )
+                            }
+                            analysisResults = analysisResults + (uri to "$name: $result")
+                            tts.speak("$name: $result", TextToSpeech.QUEUE_ADD, null, "gptResult")
+                        } catch (e: Exception) {
+                            analysisResults = analysisResults + (uri to "$name: Error: ${e.message}")
                         }
-                        analysisResults = analysisResults + (uri to "$name: $result")
-                        tts.speak("$name: $result", TextToSpeech.QUEUE_ADD, null, "gptResult")
-                    } catch (e: Exception) {
-                        analysisResults = analysisResults + (uri to "$name: Error: ${e.message}")
                     }
                 }
             }
@@ -222,129 +222,127 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     @Composable
     fun MainContent(
-        capturedImages: List<Pair<Uri, String>>,
+        capturedImages: List<Pair<Uri, String>>,  // current session
+        historyImages: List<Pair<Uri, String>>,   // all sessions
         analysisResults: Map<Uri, String>,
         onStartCamera: () -> Unit
     ) {
+        var showHistory by remember { mutableStateOf(false) }
         val context = LocalContext.current
+
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onStartCamera) {
-                Text("Start Hazard Hunt")
+            // Buttons row
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onStartCamera) {
+                    Text("Start Hazard Hunt")
+                }
+                Button(onClick = { showHistory = true }) {
+                    Text("History")
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (capturedImages.isNotEmpty()) {
-                Box(
+            if (showHistory) {
+                // History view
+                Button(onClick = { showHistory = false }) { Text("Back") }
+
+                Text(
+                    "History of Captured Photos & Analysis",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(Color(0xFFD1C4E9), shape = RoundedCornerShape(8.dp))
+                        .padding(8.dp)
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(historyImages) { (uri, name) ->
+                        SessionCard(uri, name, analysisResults, context)
+                    }
+                }
+            } else {
+                // Current session view
+                if (capturedImages.isNotEmpty()) {
+                    Text(
+                        "Captured Photos & Analysis:",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.8f), shape = RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    )
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 600.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(capturedImages) { (uri, name) ->
+                            SessionCard(uri, name, analysisResults, context)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper function to display one photo + analysis card
+    @Composable
+    fun SessionCard(
+        uri: Uri,
+        name: String,
+        analysisResults: Map<Uri, String>,
+        context: Context
+    ) {
+        val bitmap = remember(uri) { loadCorrectlyOrientedBitmap(context, uri) }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+            ) {
+                bitmap?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                         .background(Color.White.copy(alpha = 0.8f), shape = RoundedCornerShape(8.dp))
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = "Captured Photos & Analysis:",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        text = analysisResults[uri] ?: "Analyzing...",
+                        fontSize = 14.sp
                     )
                 }
-//                Text("Captured Photos & Analysis:", fontSize = 18.sp)
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 600.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(capturedImages) { (uri, name) ->
-                        val bitmap = remember(uri) { loadCorrectlyOrientedBitmap(context, uri) }
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            elevation = CardDefaults.cardElevation(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp)
-                            ) {
-                                // 左边照片
-                                bitmap?.let {
-                                    Image(
-                                        bitmap = it.asImageBitmap(),
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxHeight()
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                // 右边分析文字
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .background(Color.White.copy(alpha = 0.8f), shape = RoundedCornerShape(8.dp))
-                                        .padding(8.dp)
-                                ) {
-                                    Text(
-                                        text = analysisResults[uri] ?: "Analyzing...",
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-//                LazyColumn(
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .heightIn(max = 600.dp),
-//                    verticalArrangement = Arrangement.spacedBy(8.dp)
-//                ) {
-//                    items(capturedImages) { (uri, name) ->
-//                        val bitmap = remember(uri) { loadCorrectlyOrientedBitmap(context, uri) }
-//                        Row(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .padding(4.dp)
-//                                .height(IntrinsicSize.Min), // 让 Row 高度适应内容
-//                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-//                        ) {
-//                            bitmap?.let {
-//                                Image(
-//                                    bitmap = it.asImageBitmap(),
-//                                    contentDescription = null,
-//                                    modifier = Modifier
-//                                        .width(150.dp)
-//                                        .fillMaxHeight()
-//                                        .aspectRatio(1f),
-//                                    contentScale = ContentScale.Crop
-//                                )
-//                            }
-//                            // 分析结果框
-//                            Box(
-//                                modifier = Modifier
-//                                    .fillMaxWidth()
-//                                    .background(Color(0xAAFFEB3B)) // 半透明黄色背景，0xAA是alpha
-//                                    .padding(8.dp)
-//                            ) {
-//                                Text(
-//                                    text = analysisResults[uri] ?: "Analyzing...",
-//                                    fontSize = 14.sp,
-//                                    color = Color.Black
-//                                )
-//                            }
-//                        }
-//                    }
-//                }
             }
         }
     }
