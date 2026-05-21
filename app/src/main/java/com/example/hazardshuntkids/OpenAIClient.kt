@@ -50,11 +50,18 @@ object OpenAIClient {
             val contentArray = JSONArray().apply {
                 put(JSONObject().apply {
                     put("type", "input_text")
-                    put("text", "You are analyzing a photo for hazards for kids. \n" +
-                            "Give a very short, simple, and friendly explanation of **only the hazards or safety issues you can actually see in the photo**. \n" +
-                            "Do NOT make assumptions or imagine situations that are not visible. \n" +
-                            "Please give a **short, clear summary** in 2-5 sentences using easy words and short sentences, focusing on what is directly visible in the image.\n" +
-                            "Make it easy to read aloud.")
+                    put("text", "You are helping kids stay safe. " +
+                            "Only report hazards that are clearly visible in the photo. " +
+                            "Do not guess or warn about normal safe objects. " +
+                            "Important hazards include uncovered electrical outlets, exposed wires, sharp objects, fire, hot surfaces, broken glass, water on the floor, chemicals, medicine, blocked exits, and large or unstable things that could easily fall down, such as heavy objects on high shelves. " +
+                            "If you see one of these clear hazards, explain it in very simple words. " +
+                            "Keep the answer to 1-2 short sentences. " +
+                            "If there is no clear hazard, say: 'I do not see any dangerous things.'")
+//                    put("text", "You are analyzing a photo for hazards for kids. \n" +
+//                            "Give a very short, simple, and friendly explanation of **only the hazards or safety issues you can actually see in the photo**. \n" +
+//                            "Do NOT make assumptions or imagine situations that are not visible. \n" +
+//                            "Please give a **short, clear summary** in 2-5 sentences using easy words and short sentences, focusing on what is directly visible in the image.\n" +
+//                            "Make it easy to read aloud.")
 //                    put("text", "You are an assistant analyzing hazards in an image. \n" +
 //                            "Please give a **short, clear summary** in 2-5 sentences, \n" +
 //                            "focusing on key hazards or safety issues.")
