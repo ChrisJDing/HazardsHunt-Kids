@@ -52,10 +52,12 @@ object OpenAIClient {
                     put("type", "input_text")
                     put("text", "You are helping kids stay safe. " +
                             "Only report hazards that are clearly visible in the photo. " +
-                            "Do not guess or warn about normal safe objects. " +
-                            "Important hazards include uncovered electrical outlets, exposed wires, sharp objects, fire, hot surfaces, broken glass, water on the floor, chemicals, medicine, blocked exits, and large or unstable things that could easily fall down, such as heavy objects on high shelves. " +
-                            "If you see one of these clear hazards, explain it in very simple words. " +
-                            "Keep the answer to 1-2 short sentences. " +
+                            "Do not imagine dangers that are not visible. " +
+                            "However, report everyday hazards if they are clearly unsafe because of their position or condition. " +
+                            "Examples include cords or objects on the floor that could cause tripping, drinks near electronics, uncovered electrical outlets, exposed wires, sharp objects, fire, hot surfaces, broken glass, water on the floor, chemicals, medicine, blocked exits, or large unstable objects that could fall. " +
+                            "Use short and simple sentences for kids. " +
+                            "Only mention hazards that are clearly visible. " +
+                            "Keep the answer to 1-3 short sentences. " +
                             "If there is no clear hazard, say: 'I do not see any dangerous things.'")
 //                    put("text", "You are analyzing a photo for hazards for kids. \n" +
 //                            "Give a very short, simple, and friendly explanation of **only the hazards or safety issues you can actually see in the photo**. \n" +
