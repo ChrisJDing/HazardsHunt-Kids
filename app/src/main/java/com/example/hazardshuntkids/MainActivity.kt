@@ -1,7 +1,5 @@
 package com.example.hazardshuntkids
 
-import android.Manifest
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -9,16 +7,12 @@ import android.graphics.Matrix
 import android.media.AudioAttributes
 import android.media.SoundPool
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -102,11 +96,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         var hasApiKey by remember { mutableStateOf(ApiKeyManager.hasKey(this@MainActivity)) }
         var showSettings by remember { mutableStateOf(false) }
         val context = LocalContext.current
-        val prefs = remember {
-            context.getSharedPreferences("hazards_hunt_prefs", Context.MODE_PRIVATE)
-        }
         var showAiDisclaimer by remember {
-            mutableStateOf(!prefs.getBoolean("ai_disclaimer_seen", false))
+            mutableStateOf(true)
         }
 
         if (showCamera) {
@@ -215,7 +206,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         confirmButton = {
                             Button(
                                 onClick = {
-                                    prefs.edit().putBoolean("ai_disclaimer_seen", true).apply()
                                     showAiDisclaimer = false
                                 }
                             ) {
@@ -479,11 +469,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         cameraExecutor,
                         object : ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                soundPool.play(soundId, 1f, 1f, 1, 0, 1f)
-                                val uri = saveImageToGallery(context, photoFile)
-                                cont.resume(uri)
-                            }
 
+                                soundPool.play(soundId, 1f, 1f, 1, 0, 1f)
+
+                                val uri = Uri.fromFile(photoFile)
+
+                                cont.resume(uri)
+
+                            }
                             override fun onError(exception: ImageCaptureException) {
                                 Log.e("Camera", "Error: ${exception.message}")
                                 cont.resume(null)
@@ -494,26 +487,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 savedUri?.let { sessionCapturedImages.add(it to photoName) }
             }
             onFinished(sessionCapturedImages.toList())
-        }
-    }
-
-    fun saveImageToGallery(context: Context, file: File): Uri? {
-        val filename = "hazard_${System.currentTimeMillis()}.jpg"
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/HazardsHunt")
-            }
-        }
-        return try {
-            val resolver = context.contentResolver
-            val uri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-            uri?.let { resolver.openOutputStream(it).use { out -> file.inputStream().copyTo(out!!) } }
-            uri
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
         }
     }
 
